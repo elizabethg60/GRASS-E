@@ -20,6 +20,7 @@
 # specific files/directories
 docs/src/index.md
 data/input/
+data/velocity_field.csv
 docs/build/
 docs/Manifest.toml
 Manifest*.toml
