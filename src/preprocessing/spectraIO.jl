@@ -256,7 +256,7 @@ end
 BELOW IS LEGACY CODE
 """
 
-
+#=
 function sort_bisector_data(;dir::String=soldir, write::Bool=false)
     # glob the files
     @assert isdir(dir)
@@ -378,3 +378,4 @@ function stitch_time_series(df::DataFrame; adjust_mean::Bool=false, contiguous_o
     end
     return wavall, bisall
 end
+=#
