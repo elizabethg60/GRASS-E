@@ -1,6 +1,7 @@
-function calc_eclipse_quantities_gpu!(epoch::T1, obs_long::T1, obs_lat::T1, alt::T1, wavelength, 
+function calc_eclipse_quantities_gpu!(epoch::String, obs_long::T1, obs_lat::T1, alt::T1, wavelength, 
                                       LD_law::String, ext_toggle::T1, ext_coeff::T1,
                                       disk::DiskParamsEclipse{T2}, gpu_allocs::GPUAllocsEclipse{T1}, spot_toggle) where {T1<:AF, T2<:AF}
+    epoch = utc2et(epoch)
 
     μs = gpu_allocs.μs
     ld = gpu_allocs.ld
@@ -400,13 +401,13 @@ function calc_eclipse_quantities_gpu!(wavelength, μs, z_rot, ax_codes,
     return nothing
 end
 
-function calc_eclipse_quantities_gpu!(epoch::T1, obs_long::T1, obs_lat::T1, alt::T1, wavelength, ext_coeff::T1,
-                                      disk::DiskParamsEclipse{T2}, gpu_allocs::GPUAllocsEclipse{T1}, CB1, CB2, CB3, MF1, MF2) where {T1<:AF, T2<:AF}
+function calc_eclipse_quantities_gpu!(epoch::String, obs_long::T1, obs_lat::T1, alt::T1, wavelength, ext_coeff::T1,
+                                      disk::DiskParamsEclipse{T2}, gpu_allocs::GPUAllocsEclipse{T1}, CB1, CB2, CB3) where {T1<:AF, T2<:AF}
+    epoch = utc2et(epoch)
 
     μs = gpu_allocs.μs
     ld = gpu_allocs.ld
     contrast = gpu_allocs.contrast
-    mf = gpu_allocs.mf
     projected_v = gpu_allocs.projected_v
     earth_v = gpu_allocs.earth_v
     ext = gpu_allocs.ext
@@ -419,7 +420,6 @@ function calc_eclipse_quantities_gpu!(epoch::T1, obs_long::T1, obs_lat::T1, alt:
         μs .= 0.0
         ld .= 0.0
         contrast .= 0.0
-        mf .= 0.0
         projected_v .= 0.0
         earth_v .= 0.0
         ext .= 0.0
@@ -442,9 +442,6 @@ function calc_eclipse_quantities_gpu!(epoch::T1, obs_long::T1, obs_lat::T1, alt:
     CB1 = convert(T2, CB1)
     CB2 = convert(T2, CB2)
     CB3 = convert(T2, CB3)
-
-    MF1 = convert(T2, MF1)
-    MF2 = convert(T2, MF2)
 
     # geometry from disk
     Nϕ = disk.N
@@ -491,11 +488,6 @@ function calc_eclipse_quantities_gpu!(epoch::T1, obs_long::T1, obs_lat::T1, alt:
         Nθ = CuArray{Float64}(disk.Nθ)
     end
 
-    vmap_xyz = map((x,y) -> GRASS.sphere_to_cart_eclipse.(sun_radius, x, y), deg2rad.(vmap_info.lat_deg), deg2rad.(vmap_info.lon_deg))
-    vmap_xyz_mat = reduce(hcat, vmap_xyz)
-    vmap_xyz_gpu = CuArray(vmap_xyz_mat)
-    vmap_array = CuArray(vmap_info.velocity)
-
     spot_xyz = map((x,y) -> GRASS.sphere_to_cart_eclipse.(sun_radius, x, y), deg2rad.(spots_info.lat), deg2rad.(spots_info.lon))
     spot_xyz = map(x -> (sun_rot_mat * x) .+ OS_bary[1:3], spot_xyz)
     spot_xyz_mat = reduce(hcat, spot_xyz)
@@ -508,18 +500,18 @@ function calc_eclipse_quantities_gpu!(epoch::T1, obs_long::T1, obs_lat::T1, alt:
     threads1 = 256
     blocks1 = cld(prod(CUDA.size(μs)), prod(threads1))
     CUDA.@sync  @cuda threads=threads1 blocks=blocks1 calc_eclipse_quantities_gpu!(wavelength_gpu, μs, z_rot, ax_codes,
-                                                                               Nϕ, Nθ, Nsubgrid, Nθ_max, ld, contrast, mf, projected_v, earth_v, ext, 
+                                                                               Nϕ, Nθ, Nsubgrid, Nθ_max, ld, contrast, projected_v, earth_v, ext, 
                                                                                dA, moon_radius_gpu, OS_bary_gpu, OM_bary_gpu, EO_bary_gpu,
-                                                                               sun_rot_mat_gpu, sun_radius_gpu, A, B, C, u1, u2, u3, u4, CB1, CB2, CB3, MF1, MF2,
-                                                                               ext_coeff_gpu, spot_xyz_gpu, contrast_array, diameter_km, vmap_xyz_gpu, vmap_array)
+                                                                               sun_rot_mat_gpu, sun_radius_gpu, A, B, C, u1, u2, u3, u4, CB1, CB2, CB3,
+                                                                               ext_coeff_gpu, spot_xyz_gpu, contrast_array, diameter_km)
     return
 end                               
 
 function calc_eclipse_quantities_gpu!(wavelength, μs, z_rot, ax_codes,
-                                      Nϕ, Nθ, Nsubgrid, Nθ_max, ld, contrast, mf, projected_v, earth_v, ext,
+                                      Nϕ, Nθ, Nsubgrid, Nθ_max, ld, contrast, projected_v, earth_v, ext,
                                       dA, moon_radius, OS_bary, OM_bary, EO_bary,
-                                      sun_rot_mat, sun_radius, A, B, C, u1, u2, u3, u4, CB1, CB2, CB3, MF1, MF2,
-                                      ext_coeff_gpu, spot_xyz_gpu, contrast_array, diameter_km, vmap_xyz_gpu, vmap_array)
+                                      sun_rot_mat, sun_radius, A, B, C, u1, u2, u3, u4, CB1, CB2, CB3,
+                                      ext_coeff_gpu, spot_xyz_gpu, contrast_array, diameter_km)
     sun_radius = sun_radius[1] 
     # get indices from GPU blocks + threads
     idx = threadIdx().x + blockDim().x * (blockIdx().x-1)
@@ -556,7 +548,6 @@ function calc_eclipse_quantities_gpu!(wavelength, μs, z_rot, ax_codes,
         dA_sum = CUDA.zero(CUDA.eltype(μs))
         ld_sum = CUDA.zero(CUDA.eltype(μs))
         contrast_sum = CUDA.zero(CUDA.eltype(μs))
-        mf_sum = CUDA.zero(CUDA.eltype(μs))
         projected_v_sum = CUDA.zero(CUDA.eltype(μs))
         earth_v_sum = CUDA.zero(CUDA.eltype(μs))
         ext_sum = CUDA.zero(CUDA.eltype(μs))
@@ -650,8 +641,6 @@ function calc_eclipse_quantities_gpu!(wavelength, μs, z_rot, ax_codes,
                 angle = (OP_bary_x * vx + OP_bary_y * vy + OP_bary_z * vz) / (n1 * n2)
                 v_rot_sub = (n2 * angle) + (CB1*CUDA.exp(μ_sub)^2.0 + CB2*CUDA.exp(μ_sub) + CB3)
                 v_rot_sub *= 1000.0
-                v_rot_sub += (MF1*meridional_terms(90 - rad2deg(ϕc_sub), rad2deg(θc_sub), 5.94)[1] + MF2*meridional_terms(90 - rad2deg(ϕc_sub), rad2deg(θc_sub), 5.94)[2])
-                mf_sum += MF1*meridional_terms(90 - rad2deg(ϕc_sub), rad2deg(θc_sub), 5.94)[1] + MF2*meridional_terms(90 - rad2deg(ϕc_sub), rad2deg(θc_sub), 5.94)[2]
 
                 v_rot_sub_no_cb = (n2 * angle)
                 v_rot_sub_no_cb *= 1000.0
@@ -737,7 +726,6 @@ function calc_eclipse_quantities_gpu!(wavelength, μs, z_rot, ax_codes,
         if count > 0
             # set scalar quantity elements as average
             @inbounds contrast[m,n] = contrast_sum / count
-            @inbounds mf[m,n] = mf_sum / count
             @inbounds projected_v[m,n] = projected_v_sum / count
             @inbounds earth_v[m,n] = earth_v_sum / count
 
@@ -751,10 +739,7 @@ function calc_eclipse_quantities_gpu!(wavelength, μs, z_rot, ax_codes,
             # set vector components as average
             @inbounds xx = x_sum / μ_count
             @inbounds yy = y_sum / μ_count
-            @inbounds zz = z_sum / μ_count
-
-            # @inbounds mf[m,n] = nearest_velocity_device(xx,yy,zz,vmap_xyz_gpu, vmap_array)
-            # @inbounds projected_v[m,n] = projected_v[m,n] + nearest_velocity_device(xx,yy,zz,vmap_xyz_gpu, vmap_array)         
+            @inbounds zz = z_sum / μ_count       
 
             @inbounds ax_codes[m, n] = GRASS.find_nearest_ax_gpu(yy / sun_radius, zz / sun_radius)
         end
@@ -762,35 +747,6 @@ function calc_eclipse_quantities_gpu!(wavelength, μs, z_rot, ax_codes,
 
     return nothing
 end
-
-@inline function nearest_velocity_device(
-    x::T, y::T, z::T,
-    vmap_xyz, vmap_array) where {T}
-
-    min_d = typemax(T)
-    best_v = zero(T)
-    best_x = zero(T)
-    best_y = zero(T)
-    best_z = zero(T)
-
-
-    @inbounds for s in 1:size(vmap_xyz, 2)
-        dx = vmap_xyz[1, s] - x
-        dy = vmap_xyz[2, s] - y
-        dz = vmap_xyz[3, s] - z
-        d = dy*dy + dz*dz   
-        if d < min_d
-            min_d = d
-            best_v = vmap_array[s]
-            best_x = vmap_xyz[1, s]
-            best_y = vmap_xyz[2, s]
-            best_z = vmap_xyz[3, s]
-        end
-    end
-
-    return best_v#, best_x, best_y, best_z
-end
-
 
 function calc_grid_edge_xyz(epoch, obs_long, obs_lat, alt,
                             disk::DiskParamsEclipse{T2}, 

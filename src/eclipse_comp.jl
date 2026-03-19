@@ -1,6 +1,7 @@
-function eclipse_compute_quantities!(epoch::T, t, obs_long::T, obs_lat::T, alt::T, wavelength, 
+function eclipse_compute_quantities!(epoch, t, obs_long::T, obs_lat::T, alt::T, wavelength, 
                                       LD_law::String, ext_toggle, ext_coeff::T,
                                       disk::DiskParamsEclipse{T}, cpu_allocs::SynthWorkspaceEclipse{T}) where {T<:AF}
+    epoch = utc2et(epoch)
 
     μs = cpu_allocs.μs
     ld = cpu_allocs.ld
@@ -124,7 +125,7 @@ function eclipse_compute_quantities!(epoch::T, t, obs_long::T, obs_lat::T, alt::
             SP_sun_pos .= map(x -> pgrrec("SUN", getindex(x,2), getindex(x,1), 0.0, sun_radius, 0.0), subgrid)
 
             # get differential rotation velocities
-            v_scalar_grid .= map(x -> v_scalar(x...), subgrid)
+            v_scalar_grid .= map(x -> GRASS.v_scalar(sun_radius, x...), subgrid)
             # convert v_scalar to from km/day km/s
             v_scalar_grid ./= 86400.0
 
@@ -151,10 +152,10 @@ function eclipse_compute_quantities!(epoch::T, t, obs_long::T, obs_lat::T, alt::
             all(mu_grid .<= zero(T)) && continue
 
             # get projected velocity for each patch
-            projected!(SP_bary, OP_bary, projected_velocities_no_cb)
+            GRASS.projected!(SP_bary, OP_bary, projected_velocities_no_cb)
             # convert from km/s to m/s
             projected_velocities_no_cb .*= 1000.0
-            z_rot_sub = (projected_velocities_no_cb)./c_ms
+            z_rot_sub = (projected_velocities_no_cb)./GRASS.c_ms
 
             # get relative orbital motion in m/s
             v_delta = OS_bary[4:6]
@@ -165,7 +166,7 @@ function eclipse_compute_quantities!(epoch::T, t, obs_long::T, obs_lat::T, alt::
             end
             # convert from km/s to m/s
             v_earth_orb_proj .*= 1000.0
-            z_rot_sub .+= v_earth_orb_proj/c_ms
+            z_rot_sub .+= v_earth_orb_proj/GRASS.c_ms
 
             # calculate the distance between tile corner and moon
             for i in eachindex(OP_bary)
@@ -201,9 +202,9 @@ function eclipse_compute_quantities!(epoch::T, t, obs_long::T, obs_lat::T, alt::
             for l in eachindex(wavelength)
                 # limb darkening
                 if isnan(u3)
-                    ld_sub = map(x -> quad_limb_darkening(x, u1, u2), mu_grid)
+                    ld_sub = map(x -> GRASS.quad_limb_darkening(x, u1, u2), mu_grid)
                 else
-                    ld_sub = map(x -> quad_limb_darkening(x, u1, u2, u3, u4), mu_grid)
+                    ld_sub = map(x -> GRASS.quad_limb_darkening(x, u1, u2, u3, u4), mu_grid)
                 end
 
                 ld[i,j,l] = mean(view(ld_sub, idx3))  

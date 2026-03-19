@@ -13,14 +13,9 @@ import Base: AbstractFloat as AF
 
 GRASS.Eclipse.get_kernels()
 
-lp = GRASS.LineProperties(exclude=["CI_5380", "NaI_5896"])
+df_optim_CBOnly = CSV.read("data/optimized_cb.csv", DataFrame; header = false) 
 
-df_optim_CBOnly = CSV.read("data/Projected_OptimResults_CBOnly.csv", DataFrame; header = false) 
-df_optim_CB_MF = CSV.read("data/Projected_OptimResults_CB_MF.csv", DataFrame; header = false) 
-
-function projected_RV_gpu(time, LD_type, ext_toggle, model, spot_toggle)
-    # convert from utc to et as needed by SPICE
-    time_stamps = utc2et.(time)
+function projected_RV_gpu(time_stamps, LD_type, ext_toggle, model, spot_toggle)
 
     # NEID location
     obs_lat = 31.9583 
@@ -74,24 +69,18 @@ function projected_RV_gpu(time, LD_type, ext_toggle, model, spot_toggle)
         for t in 1:disk.Nt
             gpu_allocs = GRASS.Eclipse.GPUAllocsEclipse(spec, disk, Int(length(lines)), precision=Float64, verbose=true)
 
-            if model == "LD" #LD only (no ext), no CB/MF optim functions (hence if sunspots only flux effect for model 1 & 3 but for model 2 also GRASS CB suppression)
+            if model == "LD" #LD only (no ext), no CB optim functions (hence if sunspots only flux effect for model 1 & 3 but for model 2 also GRASS CB suppression)
                 GRASS.Eclipse.calc_eclipse_quantities_gpu!(time_stamps[t], obs_long, obs_lat, alt, lines, LD_type, ext_toggle_gpu, ext_coeff_array[i], disk, gpu_allocs, spot_toggle)
             end
 
-            if model == "LD_ext" #LD with ext, no CB/MF optim functions (hence if sunspots only flux effect for model 1 & 3 but for model 2 also GRASS CB suppression)
+            if model == "LD_ext" #LD with ext, no CB optim functions (hence if sunspots only flux effect for model 1 & 3 but for model 2 also GRASS CB suppression)
                 GRASS.Eclipse.calc_eclipse_quantities_gpu!(time_stamps[t], obs_long, obs_lat, alt, lines, LD_type, ext_toggle_gpu, ext_coeff_array[i], disk, gpu_allocs, spot_toggle)
             end
 
-            if model == "LD_ext_CB" #LD with ext & sunspots, no MF but with CB optim functions (flux & CB effect)
+            if model == "LD_ext_CB" #LD with ext & sunspots, with CB optim functions (flux & CB effect)
                 optim_list = df_optim_CBOnly[df_optim_CBOnly.Column1 .== splitext(string(splitdir(lfile[i])[2]))[1], :][1, :]
                 GRASS.Eclipse.calc_eclipse_quantities_gpu!(time_stamps[t], obs_long, obs_lat, alt, lines, ext_coeff_array[i], disk, gpu_allocs,
-                                        parse(Float64, string(optim_list[2])), parse(Float64, string(optim_list[3])), parse(Float64, string(optim_list[4])), NaN, NaN)
-            end
-
-            if model == "LD_ext_CB_MF" #LD with ext & sunspots, MF & CB optim functions (flux & CB effect)
-                optim_list = df_optim_CB_MF[df_optim_CB_MF.Column1 .== splitext(string(splitdir(lfile[i])[2]))[1], :][1, :]
-                GRASS.Eclipse.calc_eclipse_quantities_gpu!(time_stamps[t], obs_long, obs_lat, alt, lines, ext_coeff_array[i], disk, gpu_allocs,
-                                        parse(Float64, string(optim_list[2])), parse(Float64, string(optim_list[3])), parse(Float64, string(optim_list[4])), parse(Float64, string(optim_list[5])), parse(Float64, string(optim_list[6])))
+                                        parse(Float64, string(optim_list[2])), parse(Float64, string(optim_list[3])), parse(Float64, string(optim_list[4])))
             end
 
             idx_grid = Array(gpu_allocs.ld[:, :, 1]) .> 0.0
@@ -144,14 +133,6 @@ function projected_RV_gpu(time, LD_type, ext_toggle, model, spot_toggle)
         end
     end
 
-    if model == "LD_ext_CB_MF"
-        @save "projected_$(LD_type)_gpu_ext_SDO_optim.jld2"
-        jldopen("projected_$(LD_type)_gpu_ext_SDO_optim.jld2", "a+") do file
-            file["RV_list_no_cb"] = deepcopy(RV_list_no_cb_final) 
-            file["intensity"] = deepcopy(intensity_list_final) 
-            file["time"] = deepcopy(SPICE.et2utc.(time_stamps, "ISOC", 3))
-        end
-    end
 end
 
 function neid_october_eclipse_gpu(LD_type, ext_toggle, model, spot_toggle)
@@ -160,4 +141,4 @@ function neid_october_eclipse_gpu(LD_type, ext_toggle, model, spot_toggle)
     projected_RV_gpu(neid_october[1:130], LD_type, ext_toggle, model, spot_toggle)
 end
 
-neid_october_eclipse_gpu("SSD_4parameter", true, "LD_ext_CB_MF", true)
+neid_october_eclipse_gpu("SSD_4parameter", true, "LD_ext_CB", true)
