@@ -13,7 +13,6 @@
 *.tls
 *.tpc
 *.bpc
-*.png
 *.tf
 *.nfs*
 
