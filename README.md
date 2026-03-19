@@ -79,4 +79,4 @@ wavs_sim, flux_sim = GRASS.convolve_gauss(wavelengths, flux, new_res=11e4)
 v_grid_cpu, ccf_cpu = GRASS.calc_ccf(wavs_sim, flux_sim, lines, depths, 11e4)
 rv_cpu, rv_error = GRASS.calc_rvs_from_ccf(v_grid_cpu, ccf_cpu)
 ```
-![spectrum](./docs/src/assets/sample_eclipse_plot.png)
+![RM](./docs/src/assets/sample_eclipse_plot.png)
