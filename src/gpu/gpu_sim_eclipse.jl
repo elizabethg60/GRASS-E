@@ -1,6 +1,6 @@
 function disk_sim_eclipse_gpu(spec::SpecParams{T1}, disk::DiskParamsEclipse{T1}, 
                                soldata::GPUSolarData{T2}, gpu_allocs::GPUAllocsEclipse{T2},
-                               flux_cpu::AA{T1,2}, obs_long::T1, obs_lat::T1, alt::T1, time_stamps::Vector{Float64}, wavelength,
+                               flux_cpu::AA{T1,2}, obs_long::T1, obs_lat::T1, alt::T1, time_stamps::Vector{String}, wavelength,
                                ext_coeff, ext_toggle_gpu::Bool, spot_toggle_gpu::Bool, LD_type::String;
                                skip_times::BitVector=falses(disk.Nt)) where {T1<:AF, T2<:AF}
 
@@ -153,8 +153,8 @@ end
 
 function disk_sim_eclipse_gpu(spec::SpecParams{T1}, disk::DiskParamsEclipse{T1}, 
                                soldata::GPUSolarData{T2}, gpu_allocs::GPUAllocsEclipse{T2},
-                               flux_cpu::AA{T1,2}, obs_long::T1, obs_lat::T1, alt::T1, time_stamps::Vector{Float64}, wavelength,
-                               ext_coeff, CB1, CB2, CB3, MF1, MF2; skip_times::BitVector=falses(disk.Nt)) where {T1<:AF, T2<:AF}
+                               flux_cpu::AA{T1,2}, obs_long::T1, obs_lat::T1, alt::T1, time_stamps::Vector{String}, wavelength,
+                               ext_coeff, CB1, CB2, CB3; skip_times::BitVector=falses(disk.Nt)) where {T1<:AF, T2<:AF}
 
     # get dimensions for memory alloc
     Nt = disk.Nt
@@ -228,7 +228,7 @@ function disk_sim_eclipse_gpu(spec::SpecParams{T1}, disk::DiskParamsEclipse{T1},
     ext_toggle_gpu = 1.0
     # loop over time
     for t in 1:Nt
-        calc_eclipse_quantities_gpu!(time_stamps[t], obs_long, obs_lat, alt, wavelength, ext_coeff, disk, gpu_allocs, CB1, CB2, CB3, MF1, MF2)
+        calc_eclipse_quantities_gpu!(time_stamps[t], obs_long, obs_lat, alt, wavelength, ext_coeff, disk, gpu_allocs, CB1, CB2, CB3)
 
         # get conv. blueshift and keys from input data
         get_keys_and_cbs_gpu!(gpu_allocs, soldata)

@@ -1,21 +1,21 @@
 function disk_sim_eclipse(spec::SpecParams{T}, disk::DiskParamsEclipse{T}, soldata::SolarData{T},
                             wsp::SynthWorkspaceEclipse{T}, prof::AA{T,1}, flux::AA{T,2},
                             tloop, tloop_init, templates::AA{String,1}, idx, LD_type::String, wavelength::Vector{Float64}, 
-                            time_stamps::Vector{Float64}, obs_long::T, obs_lat::T, alt::T,
+                            time_stamps::Vector{String}, obs_long::T, obs_lat::T, alt::T,
                             ext_coeff, ext_toggle::Bool; skip_times::BitVector=falses(disk.Nt)) where T<:AF
 
     # loop over time
     for t in 1:disk.Nt
-            GRASS.eclipse_compute_quantities(time_stamps[t], t, obs_long, obs_lat, alt, wavelength, LD_type, ext_toggle, ext_coeff, disk, wsp)
+            GRASS.Eclipse.eclipse_compute_quantities!(time_stamps[t], t, obs_long, obs_lat, alt, wavelength, LD_type, ext_toggle, ext_coeff, disk, wsp)
 
             # get conv. blueshift and keys from input data
-            GRASS.get_keys_and_cbs_eclispe!(wsp, soldata, t)
+            GRASS.Eclipse.get_keys_and_cbs_eclispe!(wsp, soldata, t)
             
             # generate or copy tloop
             if (idx > 1) && GRASS.in_same_group(templates[idx - 1], templates[idx])
                 tloop .= tloop_init
             else
-                GRASS.generate_tloop_eclipse!(tloop_init, wsp, soldata, t)
+                GRASS.Eclipse.generate_tloop_eclipse!(tloop_init, wsp, soldata, t)
                 tloop .= tloop_init
             end
 
@@ -85,7 +85,7 @@ function disk_sim_eclipse(spec::SpecParams{T}, disk::DiskParamsEclipse{T}, solda
                     dtrim = spec.depths[l] * soldata.dep_contrast[key]
 
                     # first trim the bisectors to the correct depth
-                    trim_bisector!(dtrim, wsp.bist, wsp.intt)
+                    GRASS.trim_bisector!(dtrim, wsp.bist, wsp.intt)
 
                     # update the line profile in place
                     line_profile_cpu!(λΔD, wsp.dA[i,j,t], wsp.ld[i,j,l], wsp.ext[i,j,l], spec.lambdas, prof, wsp, ext_toggle)

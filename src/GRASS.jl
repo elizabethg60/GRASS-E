@@ -107,6 +107,7 @@ using GRASS
 using CUDA
 using DataFrames
 using Statistics
+using LinearAlgebra
 datdir = GRASS.datdir
 
 import Base: AbstractArray as AA
@@ -129,6 +130,8 @@ quad_ld_coeff_HD = CSV.read(joinpath(datdir, "LD_coeff_HD.csv"), DataFrame)
 
 spots_info = DataFrame(CSV.File(joinpath(datdir, "sunspots.csv")))
 
+include("utils.jl")
+
 # structures 
 include("structures/DiskParamsEclipse.jl")
 include("structures/SynthWorkspaceEclipse.jl")
@@ -146,6 +149,10 @@ include("gpu/gpu_physics_eclipse.jl")
 include("gpu/gpu_precomps_eclipse.jl")
 include("gpu/gpu_synthesis_eclipse.jl")
 include("gpu/gpu_sim_eclipse.jl")
+
+# star geometry + thermal/RT physics
+include("star_geometry.jl")
+include("star_physics.jl")
 
 export synthesize_spectra_eclipse
 

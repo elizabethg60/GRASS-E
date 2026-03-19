@@ -1,25 +1,18 @@
-# <img src="docs/src/assets/logo.png" height="24"> GRASS - GRanulation And Spectrum Simulator 
-[![Stable](https://img.shields.io/badge/docs-stable-blue.svg)](https://palumbom.github.io/GRASS/stable)
-[![Dev](https://img.shields.io/badge/docs-dev-blue.svg)](https://palumbom.github.io/GRASS/dev)
-[![Build Status](https://github.com/palumbom/GRASS/workflows/CI/badge.svg)](https://github.com/palumbom/GRASS/actions)
-[![arXiv](https://img.shields.io/badge/arXiv-2110.11839-b31b1b.svg)](https://arxiv.org/abs/2110.11839)
-[![arXiv](https://img.shields.io/badge/arXiv-2405.07945-b31b1b.svg)](https://arxiv.org/abs/2405.07945)
+# <img src="docs/src/assets/logo.png" height="24"> GRASS-E
 
-GRASS is a Julia package designed to produce time series of stellar spectra with realistic line-shape changes from solar granulation. 
+GRASS (GRanulation And Spectrum Simulator) is a Julia package designed to produce time series of stellar spectra with realistic line-shape changes from solar granulation. GRASS v1.0.x is described in detail in [Palumbo et al. (2022)](https://arxiv.org/abs/2110.11839) and GRASS v2.0.x is presented in [Palumbo et al. (2024a)](https://arxiv.org/abs/2405.07945).
 
-GRASS v1.0.x is described in detail in [Palumbo et al. (2022)](https://arxiv.org/abs/2110.11839); the results of this paper can be reproduced using the [showyourwork workflow](https://github.com/showyourwork/showyourwork) from [this repo](https://github.com/palumbom/palumbo22). 
-
-GRASS v2.0.x is presented in [Palumbo et al. (2024a)](https://arxiv.org/abs/2405.07945); the figures and quantitative results presented therein are reproducable with [this repo](https://github.com/palumbom/grass-two). 
+GRASS-E repurposes the GRASS software to produce granulation-driven solar spectra during a solar eclipse. GRASS-E is presented in Gonzalez et al. 2026. 
 
 ## Installation
 
-GRASS is written entirely in Julia and requires Julia v1.9 or greater. Installation instructions for Julia are available from [julialang.org](https://julialang.org/downloads/).
+GRASS-E is written entirely in Julia and requires Julia v1.9 or greater. Installation instructions for Julia are available from [julialang.org](https://julialang.org/downloads/).
 
-GRASS itself only requires a few steps to install. Simply clone the repo to your desired directory...
+GRASS-E itself only requires a few steps to install. Simply clone the repo to your desired directory...
 
 ```bash
-git clone git@github.com:palumbom/GRASS.git
-cd GRASS 
+git clone git@github.com:elizabethg60/GRASS-E.git
+cd GRASS-E 
 julia
 ```
 
@@ -31,7 +24,7 @@ Pkg.add(path=".") # assuming you are in /PATH/TO/GRASS
 using GRASS
 ```
 
-If you wish to develop or otherwise contribute to GRASS, instead add the package in develop mode:
+If you wish to develop or otherwise contribute to GRASS-E, instead add the package in develop mode:
 
 ```julia
 using Pkg
@@ -39,7 +32,7 @@ Pkg.develop(path=".") # assuming you are in /PATH/TO/GRASS
 using GRASS
 ```
 
-Upon first invocation of GRASS, Julia will automatically install the package dependencies and download the required input data. The input data can be re-installed by invoking
+Upon first invocation of GRASS-E, Julia will automatically install the package dependencies and download the required input data. The input data can be re-installed by invoking
 
 ```julia
 Pkg.build("GRASS")
@@ -47,43 +40,43 @@ Pkg.build("GRASS")
 
 Alternatively, these data can be directly downloaded from [Zenodo](https://zenodo.org/records/8271417).
 
-## Basic Example
-Generating synthetic spectra with GRASS only takes a few lines of Julia:
+## Basic CPU Example
 
 ```julia
 using GRASS
 using PyPlot
+using DataFrames
+using CSV
+
+#NEID solar feed coordinates
+obs_lat = 31.9583 
+obs_long = -111.5967  
+alt = 2.097938
 
 # parameters for lines in the spectra
-lines = [5434.5]     # array of line centers in angstroms
-depths = [0.75]      # continuum-normalized depth of lines
-resolution = 7e5     # spectral resolution of the output spectra
-spec = SpecParams(lines=lines, depths=depths, resolution=resolution)
+lines = [5434.5232]                 # array of line centers 
+templates = ["FeI_5434"]            # template data to use
+depths = [0.6]                      # array of line depths
+variability = trues(length(lines))  # granulation signature toggle 
+blueshifts = zeros(length(lines))   # set convective blueshift value
+resolution = 7e5                    # spectral resolution
+spec = GRASS.SpecParams(lines=lines, depths=depths, variability=variability, blueshifts=blueshifts, templates=templates, resolution=resolution) 
 
-# specify number of epochs (default 15-second spacing)
-disk = DiskParams(Nt=25)
+# read in NEID timestamps for October solar eclipse 
+df = CSV.read("data/NEIDOctoberTimestamps.csv", DataFrame)
+# specify number of epochs 
+disk = GRASS.Eclipse.DiskParamsEclipse(Nt=length(df.UTC))
+
+# specify limb darkening law to use
+LD_type = "SSD_4parameter"
+# specify optimized wavelength-dependent extinction coefficent  
+ext_coeff = 0.15452995224327976
 
 # synthesize the spectra
-wavelengths, flux = synthesize_spectra(spec, disk)
-
-# plot the result
-plt.plot(wavelengths, flux)
-plt.xlabel("Air Wavelength [Å]")
-plt.ylabel("Normalized Flux")
-plt.show()
+wavelengths, flux = GRASS.Eclipse.synthesize_spectra_eclipse(spec, disk, lines, LD_type, obs_long, obs_lat, alt, string.(df.UTC), ext_coeff, ext_toggle=true, use_gpu=false)
+# compute radial velocities
+wavs_sim, flux_sim = GRASS.convolve_gauss(wavelengths, flux, new_res=11e4)
+v_grid_cpu, ccf_cpu = GRASS.calc_ccf(wavs_sim, flux_sim, lines, depths, 11e4)
+rv_cpu, rv_error = GRASS.calc_rvs_from_ccf(v_grid_cpu, ccf_cpu)
 ```
-![spectrum](./docs/src/assets/spectrum.png)
-
-Additional details and examples can be found in [the documentation](https://palumbom.github.io/GRASS/stable).
-
-## Citation
-[![DOI](https://zenodo.org/badge/364662564.svg)](https://zenodo.org/badge/latestdoi/364662564)
-[![arXiv](https://img.shields.io/badge/arXiv-2110.11839-b31b1b.svg)](https://arxiv.org/abs/2110.11839)
-[![arXiv](https://img.shields.io/badge/arXiv-2405.07945-b31b1b.svg)](https://arxiv.org/abs/2405.07945)
-
-If you use GRASS in your research, please cite the relevant [software release](https://zenodo.org/badge/latestdoi/364662564) and [paper(s)](https://arxiv.org/abs/2110.11839). The [`cffconvert` tool](https://github.com/citation-file-format/cffconvert) can be used to generate a bibtex entry from the included [CITATION.cff](https://github.com/palumbom/GRASS/blob/main/CITATION.cff) (or just use the "cite this repository" button on the GitHub sidebar).
-
-## Author & Contact 
-[![GitHub followers](https://img.shields.io/github/followers/palumbom?label=Follow&style=social)](https://github.com/palumbom)
-
-This repo is maintained by [Michael Palumbo](https://michaelpalumbo.me). You may may contact him via his email - [mpalumbo@flatironinstitute.org](mailto:mpalumbo@flatironinstitute.org)
+![RM](./docs/src/assets/sample_eclipse_plot.png)

@@ -38,7 +38,7 @@ function line_profile_cpu!(mid::T, dA::T, ld::T, ext::T, lambdas::AA{T,1}, prof:
     prof_window = view(prof, lind:rind)
 
     # interpolate onto original lambda grid, extrapolate to continuum
-    itp1 = linear_interp(allwavs, allints, bc=one(T))
+    itp1 = GRASS.linear_interp(allwavs, allints, bc=one(T))
 
     if ext_toggle == false
         prof_window .+= itp1.(lambda_window) .* dA .* ld

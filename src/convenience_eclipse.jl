@@ -1,18 +1,52 @@
 """
-    synthesize_spectra_eclipse(spec, disk; seed_rng=false, verbose=true, top=NaN)
+    synthesize_spectra(
+        spec,
+        disk,
+        wavelength,
+        LD_type,
+        obs_long,
+        obs_lat, 
+        alt,
+        time_stamps,
+        ext_coeff;
+        ext_toggle,
+        seed_rng=false,
+        verbose=true,
+        use_gpu=false,
+        precision=Float64,
+        skip_times=falses(disk.Nt),
+    )
 
-TODO: finish this docstring
+Synthesize spectra given parameters in `spec` and `disk` instances.
+
+# Arguments
+- `spec::SpecParams`: spectral synthesis parameters (line list, templates, wavelength grid).
+- `disk::DiskParams`: disk simulation parameters (grid size, time samples, geometry).
+- 'wavelength::Vector{Float64}' : vector of wavelengths to be synthesized
+- 'LD_type::String' : specifies which limb darkening law to use
+- 'obs_long::T', 'obs_lat::T', 'alt::T' : coordinate information for observer (degrees, km)
+- 'time_stamps::Vector{Float64}' : vector of timestamps to evaluate (UTC string)
+- 'ext_coeff' : extinction coefficient to be used
+
+# Keyword Arguments
+- 'ext_toggle::Bool=false' : toggle for whether or not to include extinction 
+- `seed_rng::Bool=false`: re-seed RNG with a fixed seed per template.
+- `verbose::Bool=true`: print progress messages for template loading and simulation.
+- `use_gpu::Bool=false`: run the GPU implementation when available.
+- `precision::DataType=Float64`: GPU precision (`Float32` or `Float64`); see [Caveats](@ref "Caveats")
+- `skip_times::BitVector=falses(disk.Nt)`: time indices to skip in the simulation loop.
 """
 function synthesize_spectra_eclipse(spec::SpecParams{T}, disk::DiskParamsEclipse{T}, wavelength::Vector{Float64}, LD_type::String, 
-                                    obs_long::T, obs_lat::T, alt::T, time_stamps::Vector{Float64},                              
+                                    obs_long::T, obs_lat::T, alt::T, time_stamps::Vector{String},                              
                                     ext_coeff; ext_toggle::Bool=false, seed_rng::Bool=false, verbose::Bool=true,
                                     use_gpu::Bool=false, precision::DataType=Float64,
                                     skip_times::BitVector=falses(disk.Nt)) where T<:AF
+    GRASS.Eclipse.get_kernels()
     
     # call appropriate simulation function on cpu or gpu
     if use_gpu
         return synth_Eclipse_gpu(spec, disk, verbose, precision, skip_times, LD_type,
-                                    obs_long, obs_lat, alt, time_stamps, wavelength, ext_coeff, ext_toggle)
+                                    obs_long, obs_lat, alt, time_stamps, wavelength, ext_coeff, ext_toggle, false)
     else
         return synth_Eclipse_cpu(spec, disk, seed_rng, verbose, skip_times, LD_type, wavelength, 
                                     time_stamps, obs_long, obs_lat, alt, ext_coeff, ext_toggle)
@@ -21,7 +55,7 @@ end
 
 function synth_Eclipse_cpu(spec::SpecParams{T}, disk::DiskParamsEclipse{T}, seed_rng::Bool,
                             verbose::Bool, skip_times::BitVector, LD_type::String, wavelength::Vector{Float64}, 
-                            time_stamps::Vector{Float64}, obs_long::T, obs_lat::T, alt::T, ext_coeff, ext_toggle::Bool) where T<:AF
+                            time_stamps::Vector{String}, obs_long::T, obs_lat::T, alt::T, ext_coeff, ext_toggle::Bool) where T<:AF
 
     # parse out dimensions for memory allocation
     N = disk.N
@@ -59,7 +93,7 @@ function synth_Eclipse_cpu(spec::SpecParams{T}, disk::DiskParamsEclipse{T}, seed
         end
 
         # run the simulation and multiply flux by this spectrum
-        disk_sim_eclipse(spec_temp, disk, soldata, wsp, prof, flux, tloop, tloop_init, templates, idx, LD_type, wavelength, 
+        GRASS.Eclipse.disk_sim_eclipse(spec_temp, disk, soldata, wsp, prof, flux, tloop, tloop_init, templates, idx, LD_type, wavelength, 
                         time_stamps, obs_long, obs_lat, alt, ext_coeff, ext_toggle, skip_times=skip_times)
     end
     return spec.lambdas, flux
@@ -67,7 +101,7 @@ end
 
 function synth_Eclipse_gpu(spec::SpecParams{T}, disk::DiskParamsEclipse{T},
                             verbose::Bool, precision::DataType, skip_times::BitVector, LD_type::String, 
-                            obs_long::T, obs_lat::T, alt::T, time_stamps::Vector{Float64}, 
+                            obs_long::T, obs_lat::T, alt::T, time_stamps::Vector{String}, 
                             wavelength, ext_coeff, ext_toggle::Bool, spot_toggle::Bool) where T<:AF
     # make sure there is actually a GPU to use
     @assert CUDA.functional()
@@ -104,7 +138,7 @@ function synth_Eclipse_gpu(spec::SpecParams{T}, disk::DiskParamsEclipse{T},
         soldata = GPUSolarData(soldata_cpu, precision=precision)
 
         # run the simulation and multiply flux by this spectrum
-        disk_sim_eclipse_gpu(spec_temp, disk, soldata, gpu_allocs, flux, 
+        GRASS.Eclipse.disk_sim_eclipse_gpu(spec_temp, disk, soldata, gpu_allocs, flux, 
                               obs_long, obs_lat, alt, time_stamps, wavelength, 
                               ext_coeff, ext_toggle, spot_toggle, LD_type, skip_times=skip_times)
     end
@@ -113,8 +147,8 @@ end
 
 function synth_Eclipse_gpu(spec::SpecParams{T}, disk::DiskParamsEclipse{T},
                             verbose::Bool, precision::DataType, skip_times::BitVector, 
-                            obs_long::T, obs_lat::T, alt::T, time_stamps::Vector{Float64}, 
-                            wavelength, ext_coeff, CB1, CB2, CB3, MF1, MF2) where T<:AF
+                            obs_long::T, obs_lat::T, alt::T, time_stamps::Vector{String}, 
+                            wavelength, ext_coeff, CB1, CB2, CB3) where T<:AF
     # make sure there is actually a GPU to use
     @assert CUDA.functional()
 
@@ -150,9 +184,9 @@ function synth_Eclipse_gpu(spec::SpecParams{T}, disk::DiskParamsEclipse{T},
         soldata = GPUSolarData(soldata_cpu, precision=precision)
 
         # run the simulation and multiply flux by this spectrum
-        disk_sim_eclipse_gpu(spec_temp, disk, soldata, gpu_allocs, flux, 
+        GRASS.Eclipse.disk_sim_eclipse_gpu(spec_temp, disk, soldata, gpu_allocs, flux, 
                               obs_long, obs_lat, alt, time_stamps, wavelength, 
-                              ext_coeff, CB1, CB2, CB3, MF1, MF2, skip_times=skip_times)
+                              ext_coeff, CB1, CB2, CB3, skip_times=skip_times)
     end
     return spec.lambdas, flux
 end
