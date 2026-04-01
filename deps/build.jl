@@ -19,3 +19,24 @@ download_loc = abspath(joinpath(datdir, "input.tar.gz"))
 download(download_url, download_loc)
 
 Tar.extract(download_loc, soldir)
+
+files = [
+    "LD_coeff_300.csv",
+    "LD_coeff_SSD.csv",
+    "LD_coeff_HD.csv",
+    "sunspots.csv"
+]
+
+base_url = "https://zenodo.org/records/19372024/files/"
+
+for f in files
+    url = base_url * f * "?download=1"
+    out = joinpath(datdir, f)
+
+    download(url, out)
+
+    # # Optional: auto-extract if it's a tar.gz
+    # if endswith(f, ".tar.gz")
+    #     Tar.extract(out, datadir)
+    # end
+end
