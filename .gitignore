@@ -26,6 +26,10 @@ data/spvis.dat
 data/iag_blueshifts.dat
 sftp-config*.json
 data/input/*.h5
+data/LD_coeff_300.csv
+data/LD_coeff_SSD.csv
+data/LD_coeff_HD.csv
+data/sunspots.csv
 LocalPreferences.toml
 __pycache__
 .vscode
