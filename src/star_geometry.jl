@@ -124,7 +124,7 @@ function get_key_for_pos(μ::T, ax::Int, disc_mu::AA{T,1}, disc_ax::AA{Int,1}) w
     end
 
     # find the nearest mu and return early if near disk center
-    mu_ind = searchsortednearest(disc_mu, μ)
+    mu_ind = GRASS.searchsortednearest(disc_mu, μ)
     if disc_mu[mu_ind] == 1.0
         return (:c, :mu10)
     end
@@ -143,7 +143,7 @@ function get_key_for_pos(μ::T, ax::Int, disc_mu::AA{T,1}, disc_ax::AA{Int,1}) w
     end
 
     # convert mu and ax codes to symbol key
-    mu_symb = mu_to_symb(disc_mu[mu_ind])
+    mu_symb = GRASS.mu_to_symb(disc_mu[mu_ind])
     ax_symb = ax_code_to_symbol(ax_val)
     return (ax_symb, mu_symb)
 end

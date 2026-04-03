@@ -50,7 +50,7 @@ function rotation_period(ϕ::T; A::T=14.713, B::T=-2.396, C::T=-1.787) where T<:
     return 360.0/(A + B * sinϕ^2.0 + C * sinϕ^4.0)
 end
 
-function v_scalar(lat, lon)
+function v_scalar(sun_radius, lat, lon)
     return (2π * sun_radius * cos(lat)) / rotation_period(lat)
 end
 
